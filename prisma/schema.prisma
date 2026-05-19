@@ -1,0 +1,30 @@
+// Prisma schema — Postgres conventions for the AI Provisioning Platform.
+// Read docs/DATABASE.md for the full integration recipe.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+  // Match the platform's worker image (Alpine + libssl-3) so
+  // `prisma migrate deploy` finds the right engine at publish time.
+  binaryTargets   = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  // Platform reserves `public` for its own tables (app.members etc.).
+  // Every user model MUST declare `@@schema("app")`.
+  schemas  = ["app"]
+}
+
+// Example model — delete or replace with your own. Defaults use
+// `dbgenerated` and `now()` so the columns get real Postgres-side
+// defaults; raw `pg` INSERTs that bypass the Prisma client still work.
+model Example {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@schema("app")
+}
