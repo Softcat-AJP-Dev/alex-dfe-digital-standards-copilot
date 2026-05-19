@@ -1,30 +1,98 @@
-// Prisma schema — Postgres conventions for the AI Provisioning Platform.
+// Prisma schema — DfE Digital Standards Maturity Model
 // Read docs/DATABASE.md for the full integration recipe.
 
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["multiSchema"]
-  // Match the platform's worker image (Alpine + libssl-3) so
-  // `prisma migrate deploy` finds the right engine at publish time.
   binaryTargets   = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  // Platform reserves `public` for its own tables (app.members etc.).
-  // Every user model MUST declare `@@schema("app")`.
   schemas  = ["app"]
 }
 
-// Example model — delete or replace with your own. Defaults use
-// `dbgenerated` and `now()` so the columns get real Postgres-side
-// defaults; raw `pg` INSERTs that bypass the Prisma client still work.
-model Example {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt
+// --- Schools (customers) ---
 
+model School {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  urn         String?  @unique // Unique Reference Number (DfE)
+  phase       String?  // primary, secondary, all-through, FE
+  localAuthority String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+  createdByOid String? // aip-user-oid of the creator
+
+  assessments Assessment[]
+
+  @@schema("app")
+}
+
+// --- Standards reference data (seeded) ---
+
+model StandardCategory {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug        String   @unique
+  name        String
+  description String?
+  isCore      Boolean  @default(false)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  criteria StandardCriterion[]
+
+  @@schema("app")
+}
+
+model StandardCriterion {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  categoryId  String   @db.Uuid
+  slug        String   @unique
+  title       String
+  description String?
+  guidance    String?  // What "good" looks like at each level
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  category  StandardCategory      @relation(fields: [categoryId], references: [id])
+  responses AssessmentResponse[]
+
+  @@schema("app")
+}
+
+// --- Assessments ---
+
+model Assessment {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  schoolId    String   @db.Uuid
+  title       String?  // e.g. "Q1 2026 Assessment"
+  status      String   @default("in_progress") // in_progress | completed
+  assessorEmail String?
+  assessorOid   String?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  school    School               @relation(fields: [schoolId], references: [id])
+  responses AssessmentResponse[]
+
+  @@schema("app")
+}
+
+model AssessmentResponse {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  assessmentId String   @db.Uuid
+  criterionId  String   @db.Uuid
+  maturityLevel Int?    // 1–5 (null = not yet scored)
+  notes        String?  // assessor notes / evidence
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
+
+  assessment Assessment        @relation(fields: [assessmentId], references: [id])
+  criterion  StandardCriterion @relation(fields: [criterionId], references: [id])
+
+  @@unique([assessmentId, criterionId])
   @@schema("app")
 }
